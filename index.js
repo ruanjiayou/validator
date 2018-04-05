@@ -464,8 +464,8 @@ class Validator {
     }
     return true;
   }
-  isFile() {
-
+  isFile(data) {
+    return true;
   }
   getFileSignature(any) {
     return FileSignature.getSignature(any);

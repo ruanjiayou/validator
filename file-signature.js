@@ -39,6 +39,11 @@ class FileSignature {
         };
       }
     }
+    return {
+      extension: '',
+      description: '',
+      mimeType: 'application/octet-stream'
+    }
   }
   /**
    * 获取指定文件的文件头

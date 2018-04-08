@@ -4,21 +4,21 @@ const FileSignature = require('./file-signature');
 
 const messages = {
   'zh-ch': {
-    'required': '{field}字段不能为空!',
-    'url': '{field}不是有效的url!',
-    'email': '{field}不是有效的邮件格式!',
-    'date': '{value}不是有效的日期时间格式!',
-    'dateonly': '{value}不是有效的日期格式!',
-    'timeonly': '{value}不是有效的时间格式!',
-    'custom': '{value}不符合自定义的规则!',
-    'int': '{field}必须是整数!',
-    'float': '{value}不是有效的小数格式!',
-    'boolean': '{field}必须是布尔类型!',
-    'enum': '{field}的值必须是{value}中的一种!',
+    'required': '{field} 字段不能为空!',
+    'url': '{field} 字段的值 {data} 不是有效的url!',
+    'email': '{field} 字段的值 {data} 不是有效的邮件格式!',
+    'date': '{field} 字段的值 {data} 不是有效的 日期时间 格式!',
+    'dateonly': '{field} 字段的值 {data} 不是有效的日期格式!',
+    'timeonly': '{field} 字段的值 {data} 不是有效的时间格式!',
+    'custom': '{key} 不是 {field} 字段中 自定义的验证方法!',
+    'methods': {},
+    'int': '{field} 字段的值 {data} 必须是整数!',
+    'float': '{field} 字段的值 {data} 不是有效的浮点数!',
+    'boolean': '{field} 字段的值 {data} 不是布尔类型!',
+    'enum': '{field} 字段的值 {data} 不是{key} 规则中 {value} 中的一种!',
     'range': '{field}的值TODO:',
     'min': '{field}的值最小为{value}!',
     'max': '{field}的值最大为{value}!',
-    'length': '{field}的长度必须TODO:',
     'minlength': '{field}的长度最小为{value}!',
     'maxlength': '{field}的长度最大为{value}!',
     'file': '非法的文件格式!'
@@ -35,13 +35,24 @@ class Validator {
     }
     this.rules = o.rules;
     this.messages = o.messages || messages[lang];
-    this.methods = o.methods;
+    this.methods = o.methods || {};
     this.parse();
   }
-  error(data) {
-    let err = new Error();
-    err.validate = data;
+  error(o) {
+    if (typeof o === 'object') {
+      o = Validator.compile(this.messages[o.key], o);
+    }
+    let err = new Error(o);
+    err.validate = true;
     throw err;
+  }
+  static compile(str, data) {
+    let reg = /\{\s*([a-z0-9]+)\s*\}/g, res = str, m;
+    while ((m = reg.exec(str)) !== null) {
+      let k = m[0], v = m[1], value = data[v] === undefined ? '--' : data[v];
+      res = res.replace(k, value);
+    }
+    return res;
   }
   /**
    * 过滤并验证参数(综合filter()和check()两个函数)
@@ -60,11 +71,7 @@ class Validator {
       let rule = this.rules[k];
       if (!_.isUndefined(data[k])) {
         if (rule.boolean) {
-          if (['true', '1', 'false', '0'].indexOf(data[k] !== -1)) {
-            res[k] = data[k] === 'true' || data[k] === '1' ? true : false;
-          } else {
-            res[k] = false;
-          }
+          res[k] = data[k] == true ? true : false;
         } else {
           res[k] = data[k];
         }
@@ -74,29 +81,37 @@ class Validator {
   }
   /**
    * 字符串转规则对象
-   * @param {string} str 
+   * @param {string} str 字符串
+   * @returns object 规则对象
    */
-  _arr2rule(arr) {
+  static _str2rule(str) {
+    const arr = str.split('|');
+    // 默认值处理
     let rule = {
+      required: true,
       range: { min: -Infinity, max: Infinity, includeBottom: true, includeTop: true },
-      length: { min: 0, max: 255 },
-      methods: {},
-      if: {}
+      length: { minlength: 0, maxlength: 255 },
+      methods: {}
     };
+    if (arr.indexOf('text') !== -1) {
+      rule.length.maxlength = Infinity;
+    }
     for (let i = 0; i < arr.length; i++) {
-      let kv = /^([a-z]+)[:]?(.*)$/.exec(arr[i].trim().toLowerCase()), k, v;
-
-      if (kv === null) {
-        this.error(`${str} 不是有效的规则!`);
-      }
-      k = kv[1];
-      v = kv[2];
+      let str = arr[i], detail = {};
+      // 没做null判断
+      let [kv, k, v] = /^([a-z0-9]+)[:]?(.*)$/.exec(str.trim().toLowerCase());
+      detail.key = k;
+      detail.value = v;
       switch (k) {
         case 'nullable':
+          delete rule.required;
           rule.nullable = true;
           break;
-        case 'required':
-          rule.required = true;
+        case 'string':
+          rule.string = true;
+          break;
+        case 'text':
+          rule.text = true;
           break;
         case 'int':
           rule.int = true;
@@ -111,10 +126,10 @@ class Validator {
           rule.date = true;
           break;
         case 'dateonly':
-          rule.dateOnly = true;
+          rule.dateonly = true;
           break;
         case 'timeonly':
-          rule.timeOnly = true;
+          rule.timeonly = true;
           break;
         case 'url':
           rule.url = true;
@@ -129,104 +144,69 @@ class Validator {
           let that = this;
           v.split(',').map((item) => {
             let fn = item.trim();
-            if (that.methods[fn]) {
-              rule.methods[fn] = that.methods[fn];
-            } else {
-              this.error(`${fn} method notFound`);
-            }
+            rule.methods[fn] = that.methods[fn];
           });
           break;
         case 'min':
-          if (!this.isFloat(v)) {
-            this.error(`${v} 不是有效的数值`);
-          }
-          rule.range.min = v;
+          rule.range.min = parseFloat(v);
           break;
         case 'max':
-          if (!this.isFloat(v)) {
-            this.error(`${v} 不是有效的数值`);
-          }
-          rule.range.max = v;
+          rule.range.max = parseFloat(v);
           break;
         case 'range':
-          let t = /^(\(|\[)\s*(.+?)\s*,\s*(.+?)\s*(\)|\])$/.exec(v);
-          if (!(t && this.isFloat(t[2]) && this.isFloat(t[3]))) {
-            this.error(`${v} 不是有效的range格式!`)
+          rule.range.includeBottom = v.startsWith('[');
+          rule.range.includeTop = v.endsWith(']');
+          v = v.slice(1, -1);
+          if (v.indexOf(',') === -1) {
+            if (rule.range.includeBottom) {
+              rule.range.min = parseFloat(v);
+            } else {
+              rule.range.max = parseFloat(v);
+            }
+          } else {
+            [rule.range.min, rule.range.max] = v.split(',').map((n) => { return parseFloat(n); });
           }
-          rule.range.includeBottom = t[1] === '(' ? false : true;
-          rule.range.includeTop = t[4] === ')' ? false : true;
-          rule.range.min = parseFloat(t[2]);
-          rule.range.max = parseFloat(t[3]);
           break;
         case 'minlength':
-          if (!this.isInt(v)) {
-            this.error(`${v} 不是有效的正整数!`);
-          }
-          rule.length.min = parseInt(v);
+          rule.length.minlength = parseInt(v);
           break;
         case 'maxlength':
-          if (!this.isInt(v)) {
-            this.error(`${v} 不是有效的正整数!`);
-          }
-          rule.length.max = parseInt(v);
+          rule.length.maxlength = parseInt(v);
           break;
         case 'length':
-          if (this.isInt(v)) {
-            rule.length.min = rule.length.max = parseInt(v);
-          } else {
-            let t = /^(\(|\[)(\d+),(\d+)(\)|\])$/.exec(kv[2]);
-            if (t) {
-              rule['length']['min'] = parseInt(t[2]);
-              rule['length']['max'] = parseInt(t[3]);
-            } else {
-              this.error('range 不是有效的格式!')
-            }
+          if (v.indexOf(',') === -1) {
+            v = `0,${v}`;
           }
+          [rule.length.minlength, rule.length.maxlength] = v.split(',').map((n) => { return parseFloat(n.trim()); })
           break;
         case 'enum':
-          rule.in = v.split(',').map(function (s) {
-            if (s.trim() === '') {
-              this.error(`${k}枚举中多了逗号!`)
-            }
-            return s.trim();
-          });
+          rule.enum = v.split(',').map(function (s) { return s.trim(); });
           break;
         case 'if':
-          rule.if.field = k;
-          rule.if.rule = v;
+          rule.if = v;
           break;
         default: break;
       }
     }
-    // 1.nullable和required不能同时存在
-    if (rule.required == true && rule.nullable == true) {
-      this.error('nullable required');
-    }
-    if (rule.string === undefined) {
+    if (_.isNil(rule.string) && _.isNil(rule.text)) {
       delete rule.length;
-    } else if (rule.length.min > rule.length.max) {
-      this.error(`长度范围的下限大于上限!`);
     }
-    if (rule.int === undefined && rule.float === undefined) {
+    if (_.isNil(rule.int) && _.isNil(rule.float)) {
       delete rule.range;
-    } else if (rule.range.min > rule.range.max) {
-      this.error(`数值范围的下限大于上限!`);
     }
-    if (_.isEmptyObject(rule.methods)) {
+    if (_.isEmpty(rule.methods)) {
       delete rule.methods;
-    }
-    if (_.isEmptyObject(rule.if)) {
-      delete rule.if;
     }
     return rule;
   }
   /**
-   * required|int|min:100|max:200  --> required: true, int: true, max: 10, max: 200
+   * required|int|min:100|max:200  --> required: true, int: true, range: [100, 200)
    */
   parse() {
+    let ifArr = [];
     for (let k in this.rules) {
-      // 可以这里处理required_if
-      this.rules[k] = this._arr2rule(this.rules[k].split('|'));
+      let str = this.rules[k];
+      this.rules[k] = Validator._str2rule(str);
     }
     return this;
   }
@@ -239,12 +219,17 @@ class Validator {
     for (let k in this.rules) {
       let v = data[k];
       let rule = this.rules[k];
-      if (_.isUndefined(v) && rule.nullable || rule.if && _.isUndefined(data[rule.if])) {
+      // if规则和nullable的区别:nullable,data中没字段就不验证;if,为false时会主动删除data中的字段
+      if (rule.if && false === rule.methods[rule.if](v)) {
+        delete data[k];
+        continue;
+      }
+      if (_.isUndefined(v) && rule.nullable) {
         delete data[k];
         continue;
       }
       if (rule.required) {
-        if (_.isEmpty(v)) {
+        if (_.isUndefined(v)) {
           this.error({
             field: k,
             key: 'required'
@@ -332,18 +317,13 @@ class Validator {
           data[k] = moment(v).toISOString();
         }
       }
-      if (!_.isEmptyObject(rule.if)) {
-        //TODO:
-      } else {
-        delete rule.if;
-      }
+      // TODO:dateonly timeonly
       for (let k in rule.methods) {
         let fn = rule.methods[k];
         if (!fn.call(this, v)) {
           this.error({
             field: k, rule: 'method', value: v
           });
-          break;
         }
       }
     }// for end

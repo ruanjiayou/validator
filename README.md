@@ -15,7 +15,7 @@ const validator = new Validator({
   rules: {
     id: 'required|int',
     time: 'required|date',
-    status: 'required|in:pending,success,fail',
+    status: 'required|enum:pending,success,fail',
     IDCard: 'required|methods:isIDCard18,other'
   },
   methods: {
@@ -46,9 +46,13 @@ try {
 
 ## 模块说明
 ```
-一.内置字段类型
-  元类型: boolean/enum/int/float/string/url/email/date/dateonly/timeonly/file/methods
+删除了代码中的逻辑验证.不要瞎jb写 required|nullable,min:abc,require少个d,range:(20,10),methods:fn1,,fn2等等乱七八的东西
+if规则和nullable的区别:nullable,data中没字段就不验证;if,为false时会主动删除data中的字段,然后功能就和nullable一样了
+一.内置字段类型(小写)
+  元类型: boolean/enum/int/float/string/text/url/email/date/dateonly/timeonly/file/methods
   限制类型两大类:nullable/required/min/max/rang/length/minlength/maxlength/if
+  说明:联合使用要求,min/max/range和int/float,minlength/maxlength/length和string/text
+  int/float默认range为[-Infinity,Infinity],string默认length为[0,255],text默认length为[0,Infinity]
 二.内置判断方法
   isUrl/isDate/isInt/isFloat/isEmail/isID/isCredit/isString/isChar/isFile
 三.其他成员函数说明
@@ -56,11 +60,6 @@ try {
   2) filter() 滤除参数中额外的字段
   3) check() 对参数中指定的字段进行验证
   4) validate() 集成了filter()和check()的功能
-  5) _arr2rule() 将某个字段简约的字符串规则转化为详细的规则对象
-  6) parse() 对所有的字段使用_arr2rule()
+  5) _str2rule() 将某个字段简约的字符串规则转化为详细的规则对象
+  6) parse() 对所有的字段使用_str2rule()
 ```
-
-## TODO:
-- isFile() 功能完善
-- 添加messages处理,能编译字符串模板
-- i18n支持,现在默认的是zh-cn

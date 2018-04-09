@@ -12,6 +12,6 @@ describe('测试编译提示错误模板', function () {
   });
   it('测试compile() 无数据', function () {
     let str = Validator.compile('123{test}345', {});
-    assert.equal(str, '123--345');
+    assert.equal(str, '123??345');
   });
 });

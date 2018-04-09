@@ -1,7 +1,7 @@
 const assert = require('assert');
 const Validator = require('../../index');
 
-describe('', function () {
+describe('测试字段过滤filter()', function () {
   it('测试filter()', function () {
     let validator = new Validator({
       rules: {
@@ -29,7 +29,6 @@ describe('', function () {
       isApproved5: false,
       isApproved6: true
     });
-    console.log(res);
     assert.deepEqual(res, {
       id: 1,
       status: 'success',

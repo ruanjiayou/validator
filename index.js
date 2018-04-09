@@ -1,6 +1,5 @@
 const _ = require('lodash');
 const moment = require('moment');
-const FileSignature = require('./file-signature');
 
 const messages = {
   'zh-ch': {
@@ -10,20 +9,23 @@ const messages = {
     'date': '{field} 字段的值 {data} 不是有效的 日期时间 格式!',
     'dateonly': '{field} 字段的值 {data} 不是有效的日期格式!',
     'timeonly': '{field} 字段的值 {data} 不是有效的时间格式!',
-    'custom': '{key} 不是 {field} 字段中 自定义的验证方法!',
+    'custom': '{data} 不是 {field} 字段中 自定义的验证方法 {value}!',
     'methods': {},
     'int': '{field} 字段的值 {data} 必须是整数!',
     'float': '{field} 字段的值 {data} 不是有效的浮点数!',
     'boolean': '{field} 字段的值 {data} 不是布尔类型!',
-    'enum': '{field} 字段的值 {data} 不是{key} 规则中 {value} 中的一种!',
-    'range': '{field}的值TODO:',
+    'enum': '{field} 字段的值 {data} 不是{rule} 规则中 {value} 中的一种!',
     'min': '{field}的值最小为{value}!',
     'max': '{field}的值最大为{value}!',
     'minlength': '{field}的长度最小为{value}!',
     'maxlength': '{field}的长度最大为{value}!',
-    'file': '非法的文件格式!'
+    'file': '{data} 不是预期({value})的文件格式!'
   }
 };
+
+function _str2arr(str, sperator = ',') {
+  return str.split(sperator).map((item) => { return item.trim(); });
+}
 
 class Validator {
   constructor(o, lang) {
@@ -40,7 +42,7 @@ class Validator {
   }
   error(o) {
     if (typeof o === 'object') {
-      o = Validator.compile(this.messages[o.key], o);
+      o = Validator.compile(this.messages[o.rule], o);
     }
     let err = new Error(o);
     err.validate = true;
@@ -49,7 +51,7 @@ class Validator {
   static compile(str, data) {
     let reg = /\{\s*([a-z0-9]+)\s*\}/g, res = str, m;
     while ((m = reg.exec(str)) !== null) {
-      let k = m[0], v = m[1], value = data[v] === undefined ? '--' : data[v];
+      let k = m[0], v = m[1], value = data[v] === undefined ? '??' : data[v];
       res = res.replace(k, value);
     }
     return res;
@@ -85,10 +87,9 @@ class Validator {
    * @returns object 规则对象
    */
   static _str2rule(str) {
-    const arr = str.split('|');
+    const arr = _str2arr(str, '|');
     // 默认值处理
     let rule = {
-      required: true,
       range: { min: -Infinity, max: Infinity, includeBottom: true, includeTop: true },
       length: { minlength: 0, maxlength: 255 },
       methods: {}
@@ -97,48 +98,12 @@ class Validator {
       rule.length.maxlength = Infinity;
     }
     for (let i = 0; i < arr.length; i++) {
-      let str = arr[i], detail = {};
+      let str = arr[i];
       // 没做null判断
-      let [kv, k, v] = /^([a-z0-9]+)[:]?(.*)$/.exec(str.trim().toLowerCase());
-      detail.key = k;
-      detail.value = v;
+      let [kv, k, v] = /^([a-z0-9]+)[:]?(.*)$/.exec(str.trim());
       switch (k) {
-        case 'nullable':
-          delete rule.required;
-          rule.nullable = true;
-          break;
-        case 'string':
-          rule.string = true;
-          break;
-        case 'text':
-          rule.text = true;
-          break;
-        case 'int':
-          rule.int = true;
-          break;
-        case 'float':
-          rule.float = true;
-          break;
-        case 'boolean':
-          rule.boolean = true;
-          break;
-        case 'date':
-          rule.date = true;
-          break;
-        case 'dateonly':
-          rule.dateonly = true;
-          break;
-        case 'timeonly':
-          rule.timeonly = true;
-          break;
-        case 'url':
-          rule.url = true;
-          break;
-        case 'email':
-          rule.email = true;
-          break;
         case 'file':
-
+          rule.file = v.split(',').map(function (s) { return s.trim(); });
           break;
         case 'methods':
           let that = this;
@@ -177,15 +142,18 @@ class Validator {
           if (v.indexOf(',') === -1) {
             v = `0,${v}`;
           }
-          [rule.length.minlength, rule.length.maxlength] = v.split(',').map((n) => { return parseFloat(n.trim()); })
+          [rule.length.minlength, rule.length.maxlength] = _str2arr(v);
           break;
         case 'enum':
-          rule.enum = v.split(',').map(function (s) { return s.trim(); });
+          rule.enum = _str2arr(v);
           break;
         case 'if':
           rule.if = v;
           break;
-        default: break;
+        default:
+          // required nullable string text int float boolean date dateonly timeonly url email 
+          rule[k] = true;
+          break;
       }
     }
     if (_.isNil(rule.string) && _.isNil(rule.text)) {
@@ -217,9 +185,10 @@ class Validator {
    */
   check(data) {
     for (let k in this.rules) {
-      let v = data[k];
-      let rule = this.rules[k];
+      let v = data[k], rule = this.rules[k];
+      const detailInfo = { field: k, data: v, rule: '', value: '' };
       // if规则和nullable的区别:nullable,data中没字段就不验证;if,为false时会主动删除data中的字段
+      // if的顺序不能顺便
       if (rule.if && false === rule.methods[rule.if](v)) {
         delete data[k];
         continue;
@@ -228,102 +197,93 @@ class Validator {
         delete data[k];
         continue;
       }
-      if (rule.required) {
-        if (_.isUndefined(v)) {
-          this.error({
-            field: k,
-            key: 'required'
-          });
-        }
+      if (rule.required && _.isUndefined(v)) {
+        detailInfo.rule = 'required';
+        this.error(detailInfo);
       }
       if (rule.int) {
         if (!this.isInt(v)) {
-          this.error({
-            field: k,
-            key: 'int',
-            value: v
-          });
+          detailInfo.rule = 'int';
+          this.error(detailInfo);
         }
-        data[k] = parseInt(v);
+        v = parseInt(v);
       }
       if (rule.float) {
         if (!this.isFloat(v)) {
-          this.error({
-            field: k,
-            key: 'float',
-            value: v
-          });
+          detailInfo.rule = 'float';
+          this.error(detailInfo);
         }
-        data[k] = parseFloat(v);
+        v = parseFloat(v);
+      }
+      if (rule.range) {
+        if (v < rule.range.min) {
+          detailInfo.rule = 'min';
+          detailInfo.value = rule.range.min;
+          this.error(detailInfo);
+        }
+        if (v > rule.range.max) {
+          detailInfo.rule = 'max';
+          detailInfo.value = rule.range.max;
+          this.error(detailInfo);
+        }
       }
       if (rule.length) {
-        if (v.length < rule.min && v.length > rule.max) {
-          this.error({
-            field: k,
-            key: 'length',
-            value: v,
-            rule: rule.length
-          });
+        if (v.length < rule.length.minlength) {
+          detailInfo.rule = 'minlength';
+          detailInfo.value = rule.length.minlength;
+          this.error(detailInfo);
+        }
+        if (v.length > rule.length.maxlength) {
+          detailInfo.rule = 'maxlength';
+          detailInfo.value = rule.length.maxlength;
+          this.error(detailInfo);
         }
       }
-      if (rule.email) {
-        if (!this.isEmail(v)) {
-          this.error({
-            field: k,
-            key: 'email',
-            value: v
-          });
-        }
+      if (rule.email && !this.isEmail(v)) {
+        detailInfo.rule = 'email';
+        this.error(detailInfo);
       }
-      if (rule.url) {
-        if (!this.isUrl(v)) {
-          this.error({
-            field: k,
-            key: 'url',
-            value: v
-          });
-        }
+      if (rule.url && !this.isUrl(v)) {
+        detailInfo.rule = 'url';
+        this.error(detailInfo);
       }
       if (rule.file) {
 
       }
-      if (rule.enum) {
-        if (-1 == rule.enum.indexOf(v)) {
-          this.error({
-            field: k,
-            key: 'enum',
-            value: v,
-            rule: rule.enum
-          });
-        }
+      if (rule.enum && -1 === rule.enum.indexOf(v)) {
+        detailInfo.rule = 'enum';
+        detailInfo.value = rule.enum.join(',');
+        this.error(detailInfo);
       }
-      if (rule.boolean) {
-        if (typeof data[k] !== 'boolean') {
-          this.error({
-            field: k,
-            key: 'boolean',
-            value: v
-          });
-        }
+      if (rule.boolean && typeof data[k] !== 'boolean') {
+        detailInfo.rule = 'boolean';
+        this.error(detailInfo);
       }
       if (rule.date) {
         if (!this.isDate(v)) {
-          this.error({
-            field: k,
-            key: 'date',
-            value: v
-          });
-        } else {
-          data[k] = moment(v).toISOString();
+          detailInfo.rule = 'date';
+          this.error(detailInfo);
         }
+        v = moment(v).toISOString()
       }
-      // TODO:dateonly timeonly
-      for (let k in rule.methods) {
-        let fn = rule.methods[k];
+      if (rule.dateonly && !this.isDateOnly(v)) {
+        detailInfo.rule = 'dateonly';
+        this.error(detailInfo);
+      }
+      if (rule.timeonly && !this.isTimeOnly(v)) {
+        detailInfo.rule = 'timeonly';
+        this.error(detailInfo);
+      }
+      for (let f in rule.methods) {
+        let fn = rule.methods[f];
         if (!fn.call(this, v)) {
-          this.error({
-            field: k, rule: 'method', value: v
-          });
+          let fns = [];
+          for (let kk of rule.methods) {
+            fns.push(kk.constructor.name);
+          }
+          detailInfo.rule = 'method';
+          detailInfo.value = fns;
+          this.error(detailInfo);
         }
       }
     }// for end
@@ -335,6 +295,12 @@ class Validator {
   }
   isDate(v) {
     return moment(v).isValid();
+  }
+  isDateOnly(v) {
+    return moment(v, 'YYYY-MM-DD', true).isValid();
+  }
+  isTimeOnly(v) {
+    return moment(v, 'HH:mm:ss', true).isValid();
   }
   isInt(v) {
     return /^\d+$/.test(v);
@@ -446,9 +412,6 @@ class Validator {
   }
   isFile(data) {
     return true;
-  }
-  getFileSignature(any) {
-    return FileSignature.getSignature(any);
   }
 }
 

@@ -3,23 +3,23 @@ const moment = require('moment');
 
 const messages = {
   'zh-ch': {
-    'required': '{field} 字段不能为空!',
-    'url': '{field} 字段的值 {data} 不是有效的url!',
-    'email': '{field} 字段的值 {data} 不是有效的邮件格式!',
-    'date': '{field} 字段的值 {data} 不是有效的 日期时间 格式!',
-    'dateonly': '{field} 字段的值 {data} 不是有效的日期格式!',
-    'timeonly': '{field} 字段的值 {data} 不是有效的时间格式!',
-    'custom': '{data} 不是 {field} 字段中 自定义的验证方法 {value}!',
+    'required': '{{field}} 字段不能为空!',
+    'url': '{{field}} 字段的值 {{data}} 不是有效的url!',
+    'email': '{{field}} 字段的值 {{data}} 不是有效的邮件格式!',
+    'date': '{{field}} 字段的值 {{data}} 不是有效的 日期时间 格式!',
+    'dateonly': '{{field}} 字段的值 {{data}} 不是有效的日期格式!',
+    'timeonly': '{{field}} 字段的值 {{data}} 不是有效的时间格式!',
+    'custom': '{{data}} 不是 {{field}} 字段中 自定义的验证方法 {{value}}!',
     'methods': {},
-    'int': '{field} 字段的值 {data} 必须是整数!',
-    'float': '{field} 字段的值 {data} 不是有效的浮点数!',
-    'boolean': '{field} 字段的值 {data} 不是布尔类型!',
-    'enum': '{field} 字段的值 {data} 不是{rule} 规则中 {value} 中的一种!',
-    'min': '{field}的值最小为{value}!',
-    'max': '{field}的值最大为{value}!',
-    'minlength': '{field}的长度最小为{value}!',
-    'maxlength': '{field}的长度最大为{value}!',
-    'file': '{data} 不是预期({value})的文件格式!'
+    'int': '{{field}} 字段的值 {{data}} 必须是整数!',
+    'float': '{{field}} 字段的值 {{data}} 不是有效的浮点数!',
+    'boolean': '{{field}} 字段的值 {{data}} 不是布尔类型!',
+    'enum': '{{field}} 字段的值 {{data}} 不是{rule} 规则中 {{value}} 中的一种!',
+    'min': '{{field}}的值最小为{{value}}!',
+    'max': '{{field}}的值最大为{{value}}!',
+    'minlength': '{{field}}的长度最小为{{value}}!',
+    'maxlength': '{{field}}的长度最大为{{value}}!',
+    'file': '{{data}} 不是预期({{value}})的文件格式!'
   }
 };
 
@@ -28,13 +28,7 @@ function _str2arr(str, sperator = ',') {
 }
 
 class Validator {
-  constructor(o, lang) {
-    if (_.isEmpty(lang)) {
-      lang = 'zh-ch';
-    }
-    if (_.isEmpty(o)) {
-      o = { rules: {}, methods: {}, messages: {} };
-    }
+  constructor(o = { rules: {}, methods: {}, messages: {} }, lang = 'zh-cn') {
     this.rules = o.rules;
     this.messages = o.messages || messages[lang];
     this.methods = o.methods || {};
@@ -49,9 +43,9 @@ class Validator {
     throw err;
   }
   static compile(str, data) {
-    let reg = /\{\s*([a-z0-9]+)\s*\}/g, res = str, m;
+    let reg = /\{\{\s*([a-zA-Z0-9]+)\s*\}\}/g, res = str, m;
     while ((m = reg.exec(str)) !== null) {
-      let k = m[0], v = m[1], value = data[v] === undefined ? '??' : data[v];
+      const [k, v] = m, value = data[v] === undefined ? '??' : data[v];
       res = res.replace(k, value);
     }
     return res;
@@ -70,13 +64,9 @@ class Validator {
   filter(data) {
     let res = {};
     for (let k in this.rules) {
-      let rule = this.rules[k];
-      if (!_.isUndefined(data[k])) {
-        if (rule.boolean) {
-          res[k] = data[k] == true ? true : false;
-        } else {
-          res[k] = data[k];
-        }
+      let rule = this.rules[k], d = data[k];
+      if (!_.isUndefined(d)) {
+        res[k] = rule.boolean ? (d == true ? true : false) : d;
       }
     }
     return res;
@@ -171,10 +161,8 @@ class Validator {
    * required|int|min:100|max:200  --> required: true, int: true, range: [100, 200)
    */
   parse() {
-    let ifArr = [];
     for (let k in this.rules) {
-      let str = this.rules[k];
-      this.rules[k] = Validator._str2rule(str);
+      this.rules[k] = Validator._str2rule(this.rules[k]);
     }
     return this;
   }
@@ -274,6 +262,7 @@ class Validator {
         detailInfo.rule = 'timeonly';
         this.error(detailInfo);
       }
+      data[k] = v;
       for (let f in rule.methods) {
         let fn = rule.methods[f];
         if (!fn.call(this, v)) {

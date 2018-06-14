@@ -1,9 +1,13 @@
 const _ = require('lodash');
 const moment = require('moment');
 
+const types = new Set(['required', 'nullable', 'empty', 'nonzero', 'minlength', 'maxlength', 'length', 'min', 'max', 'methods', 'array', 'char', 'string', 'enum', 'int', 'float', 'file', 'boolean', 'date', 'dateonly', 'timeonly', 'email', 'url', 'IDCard', 'creditCard']);
+const atoms = new Set(['methods', 'array', 'char', 'string', 'enum', 'int', 'float', 'file', 'boolean', 'date', 'dateonly', 'timeonly', 'email', 'url', 'IDCard', 'creditCard']);
+const bools = new Set([1, '1', true, 'true', 'TRUE']);
 const messages = {
-  'zh-ch': {
-    'required': '{{field}} 字段不能为空!',
+  'zh-cn': {
+    'atom': '{{field}} 字段规则没有基本类型',
+    'required': '{{field}} 字段不能为{{value}}!',
     'url': '{{field}} 字段的值 {{data}} 不是有效的url!',
     'email': '{{field}} 字段的值 {{data}} 不是有效的邮件格式!',
     'date': '{{field}} 字段的值 {{data}} 不是有效的 日期时间 格式!',
@@ -13,61 +17,99 @@ const messages = {
     'methods': {},
     'int': '{{field}} 字段的值 {{data}} 必须是整数!',
     'float': '{{field}} 字段的值 {{data}} 不是有效的浮点数!',
+    'float.m': '{{field}} 字段的值 {{data}} 数值过大!',
+    'float.n': '{{field}} 字段的值 {{data}} 精确度过细!',
     'boolean': '{{field}} 字段的值 {{data}} 不是布尔类型!',
-    'enum': '{{field}} 字段的值 {{data}} 不是{rule} 规则中 {{value}} 中的一种!',
+    'enum': '{{field}} 字段的值 {{data}} 不是{{rule}} 规则中 {{value}} 中的一种!',
     'min': '{{field}}的值最小为{{value}}!',
     'max': '{{field}}的值最大为{{value}}!',
     'minlength': '{{field}}的长度最小为{{value}}!',
     'maxlength': '{{field}}的长度最大为{{value}}!',
+    'length': '{{field}}的长度不是{{value}}!',
     'file': '{{data}} 不是预期({{value}})的文件格式!'
   }
 };
-
-function _str2arr(str, sperator = ',') {
-  return str.split(sperator).map((item) => { return item.trim(); });
-}
-
-class Validator {
-  constructor(o = { rules: {}, methods: {}, messages: {} }, lang = 'zh-cn') {
-    this.rules = o.rules;
-    this.messages = o.messages || messages[lang];
-    this.methods = o.methods || {};
-    this.parse();
-  }
-  error(o) {
-    if (typeof o === 'object') {
-      o = Validator.compile(this.messages[o.rule], o);
+/**
+ * 辅助函数
+ * @param {string} str 
+ * @param {string} sperator 分割符
+ * @param {function} cb 回调函数
+ */
+function _str2arr(str, sperator = ',', cb) {
+  return str.split(sperator).map((item) => {
+    let res = item.trim();
+    if (typeof cb === 'function') {
+      res = cb(res);
     }
-    let err = new Error(o);
+    return res;
+  });
+}
+/**
+ * nullable: 可以传null
+ * empty: 可以传空字符串
+ * required: true,不能是undefined;false,删除字段
+ * nonzero: 不能是0
+ */
+class validater {
+  /**
+   * @param {object} o 参数: rules/[lang]/[methods]/[messages]
+   * @param {string} lang 语言,默认zh-cn
+   */
+  constructor(o = {}) {
+    this.lang = o.lang || 'zh-cn';
+    this.rules = o.rules;
+    this.messages = o.messages || messages[this.lang];
+    this.methods = o.methods || {};
+    this.rules = this.parse(this.rules);
+    if (!_.isUndefined(o.hodler)) {
+      this.holder = o.hodler;
+    }
+  }
+  /**
+   * 统一处理错误
+   * @param {object} o 错误详情
+   */
+  error(o) {
+    let err = new Error();
+    if (typeof o === 'object') {
+      _.assign(err, o);
+      o = validater.compile(this.messages[o.rule], o);
+    }
+    err.message = o;
     err.validate = true;
     throw err;
   }
+  set holder(v) {
+    this.prototype.hodler = v;
+  }
+  /**
+   * 将数据编译到模板中
+   * @param {string} str 模板
+   * @param {object} data 数据
+   */
   static compile(str, data) {
-    let reg = /\{\{\s*([a-zA-Z0-9]+)\s*\}\}/g, res = str, m;
+    let reg = /\{\{\s*([a-z0-9]+)\s*\}\}/g, res = str, m = null;
     while ((m = reg.exec(str)) !== null) {
-      const [k, v] = m, value = data[v] === undefined ? '??' : data[v];
+      let [k, v] = m, value = data[v] === undefined ? ' ?? ' : data[v];
       res = res.replace(k, value);
     }
     return res;
   }
   /**
    * 过滤并验证参数(综合filter()和check()两个函数)
+   * @param {object} data 待校验数据
    */
   validate(data) {
-    let res = this.filter(data);
-    this.check(res);
-    return res;
+    return this.check(this.filter(data));
   }
   /**
    * 按rules的字段,过滤额外的字段
+   * @param {object} 原数据
    */
   filter(data) {
     let res = {};
     for (let k in this.rules) {
-      let rule = this.rules[k], d = data[k];
-      if (!_.isUndefined(d)) {
-        res[k] = rule.boolean ? (d == true ? true : false) : d;
-      }
+      res[k] = this.rules[k].boolean === true ? (bools.has(data[k]) ? true : false) : data[k];
     }
     return res;
   }
@@ -76,203 +118,203 @@ class Validator {
    * @param {string} str 字符串
    * @returns object 规则对象
    */
-  static _str2rule(str) {
+  _str2rule(str) {
     const arr = _str2arr(str, '|');
+    let hasAtom = false;
     // 默认值处理
-    let rule = {
-      range: { min: -Infinity, max: Infinity, includeBottom: true, includeTop: true },
-      length: { minlength: 0, maxlength: 255 },
-      methods: {}
-    };
-    if (arr.indexOf('text') !== -1) {
-      rule.length.maxlength = Infinity;
-    }
+    let rule = {};
     for (let i = 0; i < arr.length; i++) {
       let str = arr[i];
-      // 没做null判断
-      let [kv, k, v] = /^([a-z0-9]+)[:]?(.*)$/.exec(str.trim());
-      switch (k) {
-        case 'file':
-          rule.file = v.split(',').map(function (s) { return s.trim(); });
-          break;
-        case 'methods':
-          let that = this;
-          v.split(',').map((item) => {
-            let fn = item.trim();
-            rule.methods[fn] = that.methods[fn];
-          });
-          break;
-        case 'min':
-          rule.range.min = parseFloat(v);
-          break;
-        case 'max':
-          rule.range.max = parseFloat(v);
-          break;
-        case 'range':
-          rule.range.includeBottom = v.startsWith('[');
-          rule.range.includeTop = v.endsWith(']');
-          v = v.slice(1, -1);
-          if (v.indexOf(',') === -1) {
-            if (rule.range.includeBottom) {
-              rule.range.min = parseFloat(v);
-            } else {
-              rule.range.max = parseFloat(v);
-            }
-          } else {
-            [rule.range.min, rule.range.max] = v.split(',').map((n) => { return parseFloat(n); });
-          }
-          break;
-        case 'minlength':
-          rule.length.minlength = parseInt(v);
-          break;
-        case 'maxlength':
-          rule.length.maxlength = parseInt(v);
-          break;
-        case 'length':
-          if (v.indexOf(',') === -1) {
-            v = `0,${v}`;
-          }
-          [rule.length.minlength, rule.length.maxlength] = _str2arr(v);
-          break;
-        case 'enum':
-          rule.enum = _str2arr(v);
-          break;
-        case 'if':
-          rule.if = v;
-          break;
-        default:
-          // required nullable string text int float boolean date dateonly timeonly url email 
-          rule[k] = true;
-          break;
+      let [kv, k, v] = /^([a-zA-Z0-9]+)[:]?(.*)$/.exec(str.trim());
+      if (!types.has(k)) {
+        throw new Error(`参数验证中没有 ${k} 规则!`);
+      }
+      // 至少一个基本类型的检查
+      if (hasAtom === false && atoms.has(k)) {
+        hasAtom = true;
+      }
+      if ('file' === k) {
+        rule.file = _str2arr(v);
+      } else if ('methods' === k) {
+        let that = this;
+        rule.methods = {};
+        _str2arr(v, ',', (name) => { rule.methods[name] = that.methods[name]; });
+      } else if ('min' === k) {
+        rule.min = parseFloat(v);
+      } else if ('max' === k) {
+        rule.max = parseFloat(v);
+      } else if ('float' === k) {
+        if (v.trim() === '') {
+          rule.float = { m: 10, n: 2 };
+        } else {
+          const [m, n] = _str2arr(v, ',', (i) => { return parseInt(i); });
+          rule.float = { m, n };
+        }
+      } else if ('minlength' === k) {
+        rule.minlength = parseInt(v);
+      } else if ('maxlength' === k) {
+        rule.maxlength = parseInt(v);
+      } else if ('length' === k) {
+        rule.length = parseInt(v);
+      } else if ('enum' === k) {
+        rule.enum = new Set(_str2arr(v));
+      } else {
+        rule[k] = true;
       }
     }
-    if (_.isNil(rule.string) && _.isNil(rule.text)) {
-      delete rule.length;
-    }
-    if (_.isNil(rule.int) && _.isNil(rule.float)) {
-      delete rule.range;
-    }
-    if (_.isEmpty(rule.methods)) {
-      delete rule.methods;
+    if (hasAtom === false) {
+      throw new Error(`验证语法中必须要有基本类型!`);
     }
     return rule;
   }
   /**
-   * required|int|min:100|max:200  --> required: true, int: true, range: [100, 200)
+   * 将简易字符串验证转化为增强对象
+   * required|int|min:100|max:200  --> { required: true, int: true }
+   * @param {object} 验证对象(简单字符串表达)
+   * @returns object 验证对象(增强型对象)
    */
-  parse() {
-    for (let k in this.rules) {
-      this.rules[k] = Validator._str2rule(this.rules[k]);
+  parse(rules) {
+    const res = {};
+    for (let k in rules) {
+      res[k] = this._str2rule(rules[k]);
     }
-    return this;
+    return res;
   }
   /**
-   * k 字段
-   * v 值
-   * kk 验证规则
+   * k: 字段, data: 
+   * @param {object} data 数据
+   * @returns 处理后的数据
    */
   check(data) {
     for (let k in this.rules) {
       let v = data[k], rule = this.rules[k];
-      const detailInfo = { field: k, data: v, rule: '', value: '' };
-      // if规则和nullable的区别:nullable,data中没字段就不验证;if,为false时会主动删除data中的字段
-      // if的顺序不能顺便
-      if (rule.if && false === rule.methods[rule.if](v)) {
-        delete data[k];
+      const err = { field: k, data: v, rule: '', value: '' };
+      // undefined null '' 的处理:required处理undefined;nullable处理null;empty 处理 空字符串
+      if (null === v && rule.nullable || v === '' && rule.empty) {
         continue;
       }
-      if (_.isUndefined(v) && rule.nullable) {
-        delete data[k];
-        continue;
+      // 0 '0' '0000'
+      if (rule.nonzero && /^[0]+$/.test(v)) {
+        err.rule = 'nonzero';
+        this.error(err);
       }
-      if (rule.required && _.isUndefined(v)) {
-        detailInfo.rule = 'required';
-        this.error(detailInfo);
+      if (null === v || v === undefined || v === '') {
+        if (rule.required) {
+          err.rule = 'required';
+          err.value = `${v}`;
+          this.error(err);
+        } else {
+          delete data[k];
+          continue;
+        }
       }
       if (rule.int) {
         if (!this.isInt(v)) {
-          detailInfo.rule = 'int';
-          this.error(detailInfo);
+          err.rule = 'int';
+          this.error(err);
         }
         v = parseInt(v);
       }
       if (rule.float) {
-        if (!this.isFloat(v)) {
-          detailInfo.rule = 'float';
-          this.error(detailInfo);
+        err.rule = 'float';
+        const mm = /^[-+]?((\d+)[.])?(\d+)$/.exec(v);
+        if (null !== mm) {
+          let n = mm[3].length, m = 0;
+          if (undefined === mm[2]) {
+            m = n;
+            n = 0
+          } else {
+            m = mm[2].length + n;
+          }
+          if (m > rule.float.m) {
+            err.rule = 'float.m';
+            this.error(err);
+          }
+          if (n > rule.float.n) {
+            err.rule = 'float.n';
+            this.error(err);
+          }
+        } else {
+          this.error(err);
         }
         v = parseFloat(v);
       }
-      if (rule.range) {
-        if (v < rule.range.min) {
-          detailInfo.rule = 'min';
-          detailInfo.value = rule.range.min;
-          this.error(detailInfo);
-        }
-        if (v > rule.range.max) {
-          detailInfo.rule = 'max';
-          detailInfo.value = rule.range.max;
-          this.error(detailInfo);
-        }
+      if (_.isNumber(rule.min) && v < rule.min) {
+        err.rule = 'min';
+        this.error(err);
       }
-      if (rule.length) {
-        if (v.length < rule.length.minlength) {
-          detailInfo.rule = 'minlength';
-          detailInfo.value = rule.length.minlength;
-          this.error(detailInfo);
+      if (_.isNumber(rule.max) && v > rule.max) {
+        err.rule = 'max';
+        this.error(err);
+      }
+      if (rule.array && !_.isArray(v)) {
+        err.rule = 'array';
+        this.error(err);
+      }
+      if (_.isString(v) || _.isArray(v)) {
+        if (_.isNumber(rule.minlength) && v.length < rule.minlength) {
+          err.rule = 'minlength';
+          err.value = rule.minlength;
+          this.error(err);
         }
-        if (v.length > rule.length.maxlength) {
-          detailInfo.rule = 'maxlength';
-          detailInfo.value = rule.length.maxlength;
-          this.error(detailInfo);
+        if (_.isNumber(rule.maxlength) && v.length > rule.maxlength) {
+          err.rule = 'maxlength';
+          err.value = rule.maxlength;
+          this.error(err);
+        }
+        if (_.isNumber(rule.length) && rule.length !== v.length) {
+          err.rule = 'length';
+          err.value = rule.length;
+          this.error(err);
         }
       }
       if (rule.email && !this.isEmail(v)) {
-        detailInfo.rule = 'email';
-        this.error(detailInfo);
+        err.rule = 'email';
+        this.error(err);
       }
       if (rule.url && !this.isUrl(v)) {
-        detailInfo.rule = 'url';
-        this.error(detailInfo);
+        err.rule = 'url';
+        this.error(err);
       }
-      if (rule.file) {
-
-      }
-      if (rule.enum && -1 === rule.enum.indexOf(v)) {
-        detailInfo.rule = 'enum';
-        detailInfo.value = rule.enum.join(',');
-        this.error(detailInfo);
+      if (rule.enum && -1 === rule.enum.has(v)) {
+        err.rule = 'enum';
+        err.value = Array.from(rule.enum);
+        this.error(err);
       }
       if (rule.boolean && typeof data[k] !== 'boolean') {
-        detailInfo.rule = 'boolean';
-        this.error(detailInfo);
+        err.rule = 'boolean';
+        this.error(err);
       }
       if (rule.date) {
         if (!this.isDate(v)) {
-          detailInfo.rule = 'date';
-          this.error(detailInfo);
+          err.rule = 'date';
+          this.error(err);
         }
-        v = moment(v).toISOString()
+        v = moment(v).toISOString();
       }
       if (rule.dateonly && !this.isDateOnly(v)) {
-        detailInfo.rule = 'dateonly';
-        this.error(detailInfo);
+        err.rule = 'dateonly';
+        this.error(err);
       }
       if (rule.timeonly && !this.isTimeOnly(v)) {
-        detailInfo.rule = 'timeonly';
-        this.error(detailInfo);
+        err.rule = 'timeonly';
+        this.error(err);
+      }
+      if (rule.IDCard && !this.isIDCard(v)) {
+        err.rule = 'IDCard';
+        this.error(err);
+      }
+      if (rule.creditCard && !this.isCreditCard(v)) {
+        err.rule = 'creditCard';
+        this.error(err);
       }
       data[k] = v;
       for (let f in rule.methods) {
         let fn = rule.methods[f];
         if (!fn.call(this, v)) {
-          let fns = [];
-          for (let kk of rule.methods) {
-            fns.push(kk.constructor.name);
-          }
-          detailInfo.rule = 'method';
-          detailInfo.value = fns;
-          this.error(detailInfo);
+          err.rule = 'methods';
+          err.value = f;
+          this.error(err);
         }
       }
     }// for end
@@ -292,18 +334,18 @@ class Validator {
     return moment(v, 'HH:mm:ss', true).isValid();
   }
   isInt(v) {
-    return /^\d+$/.test(v);
+    return /^[-+]?\d+$/.test(v);
   }
   isFloat(v) {
-    return /^[-+]?(\d+[.])?\d+$/.test(v);
+    return /^[-+]?(\d+[.])?(\d+)$/.test(v);
   }
   isEmail(v) {
     return /^((([a-z]|\d|[!#\$%&'\*\+\-\/=\?\^_`{\|}~]|[\u00A0-\uD7FF\uF900-\uFDCF\uFDF0-\uFFEF])+(\.([a-z]|\d|[!#\$%&'\*\+\-\/=\?\^_`{\|}~]|[\u00A0-\uD7FF\uF900-\uFDCF\uFDF0-\uFFEF])+)*)|((\x22)((((\x20|\x09)*(\x0d\x0a))?(\x20|\x09)+)?(([\x01-\x08\x0b\x0c\x0e-\x1f\x7f]|\x21|[\x23-\x5b]|[\x5d-\x7e]|[\u00A0-\uD7FF\uF900-\uFDCF\uFDF0-\uFFEF])|(\\([\x01-\x09\x0b\x0c\x0d-\x7f]|[\u00A0-\uD7FF\uF900-\uFDCF\uFDF0-\uFFEF]))))*(((\x20|\x09)*(\x0d\x0a))?(\x20|\x09)+)?(\x22)))@((([a-z]|\d|[\u00A0-\uD7FF\uF900-\uFDCF\uFDF0-\uFFEF])|(([a-z]|\d|[\u00A0-\uD7FF\uF900-\uFDCF\uFDF0-\uFFEF])([a-z]|\d|-|\.|_|~|[\u00A0-\uD7FF\uF900-\uFDCF\uFDF0-\uFFEF])*([a-z]|\d|[\u00A0-\uD7FF\uF900-\uFDCF\uFDF0-\uFFEF])))\.)+(([a-z]|[\u00A0-\uD7FF\uF900-\uFDCF\uFDF0-\uFFEF])|(([a-z]|[\u00A0-\uD7FF\uF900-\uFDCF\uFDF0-\uFFEF])([a-z]|\d|-|\.|_|~|[\u00A0-\uD7FF\uF900-\uFDCF\uFDF0-\uFFEF])*([a-z]|[\u00A0-\uD7FF\uF900-\uFDCF\uFDF0-\uFFEF])))\.?$/i.test(v)
   }
-  isID(sfzhm_new) {
-    var sum = 0;
-    var weight = [7, 9, 10, 5, 8, 4, 2, 1, 6, 3, 7, 9, 10, 5, 8, 4, 2];
-    var validate = ['1', '0', 'X', '9', '8', '7', '6', '5', '4', '3', '2'];
+  isIDCard(sfzhm_new) {
+    let sum = 0,
+      weight = [7, 9, 10, 5, 8, 4, 2, 1, 6, 3, 7, 9, 10, 5, 8, 4, 2],
+      validate = ['1', '0', 'X', '9', '8', '7', '6', '5', '4', '3', '2'];
     for (let m = 0; m < sfzhm_new.length - 1; m++) {
       sum += sfzhm_new[m] * weight[m];
     }
@@ -325,7 +367,7 @@ class Validator {
    * 方法步骤很清晰，易理解，需要在页面引用Jquery.js
    * bankno为银行卡号
    */
-  isCredit(bankno) {
+  isCreditCard(bankno) {
     var lastNum = bankno.substr(bankno.length - 1, 1);//取出最后一位（与luhm进行比较）
 
     var first15Num = bankno.substr(0, bankno.length - 1);//前15或18位
@@ -399,9 +441,15 @@ class Validator {
     }
     return true;
   }
+  /**
+   * 字符串或数组
+   * @param {string|array} data 
+   */
   isFile(data) {
-    return true;
+    return ((_.isString(data)) || _.isArray(data)) ? true : false;
   }
 }
 
-module.exports = Validator;
+module.exports = {
+  validater
+};

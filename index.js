@@ -1,12 +1,12 @@
 const _ = require('lodash');
 const moment = require('moment');
 
-const types = new Set(['required', 'nullable', 'empty', 'nonzero', 'minlength', 'maxlength', 'length', 'min', 'max', 'methods', 'array', 'char', 'string', 'enum', 'int', 'float', 'file', 'boolean', 'date', 'dateonly', 'timeonly', 'email', 'url', 'IDCard', 'creditCard']);
-const atoms = new Set(['methods', 'array', 'char', 'string', 'enum', 'int', 'float', 'file', 'boolean', 'date', 'dateonly', 'timeonly', 'email', 'url', 'IDCard', 'creditCard']);
+const types = new Set(['required', 'nullable', 'empty', 'nonzero', 'ignore', 'default', 'alias', 'format', 'object', 'array', 'minlength', 'maxlength', 'length', 'min', 'max', 'methods', 'array', 'char', 'string', 'enum', 'int', 'float', 'file', 'boolean', 'date', 'dateonly', 'timeonly', 'email', 'url', 'IDCard', 'creditCard']);
+const atoms = new Set(['methods', 'array', 'object', 'char', 'string', 'enum', 'int', 'float', 'file', 'boolean', 'date', 'dateonly', 'timeonly', 'email', 'url', 'IDCard', 'creditCard']);
 const bools = new Set([1, '1', true, 'true', 'TRUE']);
 const messages = {
   'zh-cn': {
-    'atom': '{{field}} 字段规则没有基本类型',
+    'atom': '验证规则{{value}}中有且只有一种基本类型!',
     'required': '{{field}} 字段不能为{{value}}!',
     'url': '{{field}} 字段的值 {{data}} 不是有效的url!',
     'email': '{{field}} 字段的值 {{data}} 不是有效的邮件格式!',
@@ -21,6 +21,8 @@ const messages = {
     'float.n': '{{field}} 字段的值 {{data}} 精确度过细!',
     'boolean': '{{field}} 字段的值 {{data}} 不是布尔类型!',
     'enum': '{{field}} 字段的值 {{data}} 不是{{rule}} 规则中 {{value}} 中的一种!',
+    'array': '{{field}} 字段的值 {{data}} 不是数组!',
+    'object': '{{field}} 字段的值 {{data}} 不是对象!',
     'min': '{{field}}的值最小为{{value}}!',
     'max': '{{field}}的值最大为{{value}}!',
     'minlength': '{{field}}的长度最小为{{value}}!',
@@ -80,7 +82,7 @@ class validater {
     throw err;
   }
   set holder(v) {
-    this.prototype.hodler = v;
+    this.prototype.holder = v;
   }
   /**
    * 将数据编译到模板中
@@ -122,7 +124,21 @@ class validater {
     const arr = _str2arr(str, '|');
     let hasAtom = false;
     // 默认值处理
-    let rule = {};
+    let rule = {
+      'required': false,
+      'nullable': false,
+      'nonzero': false,
+      'empty': false,
+      'ignore': false,
+      'boolean': false,
+      'int': false,
+      'float': false,
+      'date': false,
+      'dateonly': false,
+      'timeonly': false,
+      'default': undefined,
+      'methods': {}
+    };
     for (let i = 0; i < arr.length; i++) {
       let str = arr[i];
       let [kv, k, v] = /^([a-zA-Z0-9]+)[:]?(.*)$/.exec(str.trim());
@@ -158,6 +174,30 @@ class validater {
         rule.length = parseInt(v);
       } else if ('enum' === k) {
         rule.enum = new Set(_str2arr(v));
+      } else if ('alias' === k) {
+        rule.alias = v;
+      } else if ('default' === k) {
+        switch (v) {
+          case '0': rule.default = 0; break;
+          case '1': rule.default = 1; break;
+          case 'true': rule.default = true; break;
+          case 'false': rule.default = false; break;
+          case 'null': rule.default = null; break;
+          case 'array': rule.default = []; break;
+          case 'object': rule.default = {}; break;
+          case 'timestamp': rule.default = new Date().getTime(); break;
+          case 'unix': rule.default = Math.round(new Date().getTime() / 1000); break;
+          case 'datetime': rule.default = new Date(); break;
+          case 'today': rule.default = moment().startOf('d').toDate(); break;
+          case 'tonight': rule.default = moment().endOf('d').toDate(); break;
+          default:
+            if (/^(['"])(.*)\1$/.test(v)) {
+              rule.default = v.substr(1, v.length - 2);
+            }
+            break;
+        }
+      } else if ('format' === k) {
+        rule.format = v;
       } else {
         rule[k] = true;
       }
@@ -187,29 +227,40 @@ class validater {
    */
   check(data) {
     for (let k in this.rules) {
-      let v = data[k], rule = this.rules[k];
+      let rule = this.rules[k];
+      if (!_.isNil(rule.default)) {
+        data[k] = rule.default;
+      }
+      let v = data[k];
+      delete data[k];
       const err = { field: k, data: v, rule: '', value: '' };
       // undefined null '' 的处理:required处理undefined;nullable处理null;empty 处理 空字符串
       if (null === v && rule.nullable || v === '' && rule.empty) {
+        data[k] = v;
         continue;
       }
       // 0 '0' '0000'
       if (rule.nonzero && /^[0]+$/.test(v)) {
+        if (rule.ignore && rule.required == false) {
+          continue;
+        }
         err.rule = 'nonzero';
         this.error(err);
       }
-      if (null === v || v === undefined || v === '') {
+      if (_.isUndefined(v)) {
         if (rule.required) {
           err.rule = 'required';
           err.value = `${v}`;
           this.error(err);
         } else {
-          delete data[k];
           continue;
         }
       }
       if (rule.int) {
         if (!this.isInt(v)) {
+          if (rule.ignore && rule.required == false) {
+            continue;
+          }
           err.rule = 'int';
           this.error(err);
         }
@@ -227,98 +278,171 @@ class validater {
             m = mm[2].length + n;
           }
           if (m > rule.float.m) {
+            if (rule.ignore && rule.required == false) {
+              continue;
+            }
             err.rule = 'float.m';
             this.error(err);
           }
           if (n > rule.float.n) {
+            if (rule.ignore && rule.required == false) {
+              continue;
+            }
             err.rule = 'float.n';
             this.error(err);
           }
         } else {
+          if (rule.ignore && rule.required == false) {
+            continue;
+          }
           this.error(err);
         }
         v = parseFloat(v);
       }
       if (_.isNumber(rule.min) && v < rule.min) {
+        if (rule.ignore && rule.required == false) {
+          continue;
+        }
         err.rule = 'min';
         this.error(err);
       }
       if (_.isNumber(rule.max) && v > rule.max) {
+        if (rule.ignore && rule.required == false) {
+          continue;
+        }
         err.rule = 'max';
         this.error(err);
       }
       if (rule.array && !_.isArray(v)) {
+        if (rule.ignore && rule.required == false) {
+          continue;
+        }
         err.rule = 'array';
         this.error(err);
       }
       if (_.isString(v) || _.isArray(v)) {
         if (_.isNumber(rule.minlength) && v.length < rule.minlength) {
+          if (rule.ignore && rule.required == false) {
+            continue;
+          }
           err.rule = 'minlength';
           err.value = rule.minlength;
           this.error(err);
         }
         if (_.isNumber(rule.maxlength) && v.length > rule.maxlength) {
+          if (rule.ignore && rule.required == false) {
+            continue;
+          }
           err.rule = 'maxlength';
           err.value = rule.maxlength;
           this.error(err);
         }
         if (_.isNumber(rule.length) && rule.length !== v.length) {
+          if (rule.ignore && rule.required == false) {
+            continue;
+          }
           err.rule = 'length';
           err.value = rule.length;
           this.error(err);
         }
       }
       if (rule.email && !this.isEmail(v)) {
+        if (rule.ignore && rule.required == false) {
+          continue;
+        }
         err.rule = 'email';
         this.error(err);
       }
       if (rule.url && !this.isUrl(v)) {
+        if (rule.ignore && rule.required == false) {
+          continue;
+        }
         err.rule = 'url';
         this.error(err);
       }
       if (rule.enum && -1 === rule.enum.has(v)) {
+        if (rule.ignore && rule.required == false) {
+          continue;
+        }
         err.rule = 'enum';
         err.value = Array.from(rule.enum);
         this.error(err);
       }
-      if (rule.boolean && typeof data[k] !== 'boolean') {
+      if (rule.boolean && typeof v !== 'boolean') {
+        if (rule.ignore && rule.required == false) {
+          continue;
+        }
         err.rule = 'boolean';
         this.error(err);
       }
       if (rule.date) {
         if (!this.isDate(v)) {
+          if (rule.ignore && rule.required == false) {
+            continue;
+          }
           err.rule = 'date';
           this.error(err);
         }
         v = moment(v).toISOString();
       }
       if (rule.dateonly && !this.isDateOnly(v)) {
+        if (rule.ignore && rule.required == false) {
+          continue;
+        }
         err.rule = 'dateonly';
         this.error(err);
       }
       if (rule.timeonly && !this.isTimeOnly(v)) {
+        if (rule.ignore && rule.required == false) {
+          continue;
+        }
         err.rule = 'timeonly';
         this.error(err);
       }
       if (rule.IDCard && !this.isIDCard(v)) {
+        if (rule.ignore && rule.required == false) {
+          continue;
+        }
         err.rule = 'IDCard';
         this.error(err);
       }
       if (rule.creditCard && !this.isCreditCard(v)) {
+        if (rule.ignore && rule.required == false) {
+          continue;
+        }
         err.rule = 'creditCard';
         this.error(err);
       }
-      data[k] = v;
       for (let f in rule.methods) {
         let fn = rule.methods[f];
         if (!fn.call(this, v)) {
+          if (rule.ignore && rule.required == false) {
+            continue;
+          }
           err.rule = 'methods';
           err.value = f;
           this.error(err);
         }
       }
+      v = this.format(v, rule.format);
+      if (typeof rule.alias == 'string') {
+        const alias = rule.alias.replace('%', k);
+        data[alias] = v;
+      } else {
+        data[k] = v;
+      }
     }// for end
     return data;
+  }
+
+  format(v, pattern) {
+    let res = v;
+    if (pattern === 'string') {
+      if (_.isArray(v) || _.isObject(v)) {
+        res = JSON.stringify(res);
+      }
+    }
+    return res;
   }
 
   isUrl(v) {

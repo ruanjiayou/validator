@@ -100,14 +100,24 @@ describe('测试字段检查', function () {
     // 数值字符串 ==> 正常
     const i2 = validation.validate({ id: '2' });
     assert.deepEqual(i2, { id: 2 });
-    // 无required null/undefined/'' ==> 正常
-    const i3 = validation.validate({ id: null });
-    assert.deepEqual(i3, {});
+    // 无required undefined ==> 正常 null/'' 错误
+    try {
+      const i3 = validation.validate({ id: null });
+      assert.deepEqual(i3, {});
+    } catch (err) {
+      assert.equal(err.field, 'id');
+      assert.equal(err.rule, 'int');
+    }
+    try {
+      const i5 = validation.validate({ id: '' });
+      assert.deepEqual(i5, {});
+    } catch (err) {
+      assert.equal(err.field, 'id');
+      assert.equal(err.rule, 'int');
+    }
     const i4 = validation.validate({ id: undefined });
     assert.deepEqual(i4, {});
-    // 查询才可以为 ''
-    const i5 = validation.validate({ id: '' });
-    assert.deepEqual(i5, {});
+
     try {
       validation.validate({ id: 'a' })
     } catch (err) {
@@ -362,4 +372,49 @@ describe('测试字段检查', function () {
   /**
    * if?
    */
+  it('21.default', () => {
+    const validation = new validater({
+      rules: {
+        createdAt: 'required|date|default:datetime',
+        content: 'required|string|default:"123"',
+        ts: 'required|int|default:timestamp',
+        ms: 'required|int|default:unix',
+        today: 'required|date|default:today',
+        tonight: 'required|date|default:tonight',
+        images: 'required|array|default:array',
+        json: 'required|object|default:object'
+      }
+    });
+    const data = validation.validate({});
+    console.log(data);
+  });
+  it('22.format', () => {
+    const validation = new validater({
+      rules: {
+        images: 'required|array|default:array|format:string',
+        json: 'required|object|default:object|format:string'
+      }
+    });
+    const data = validation.validate({});
+    assert.equal(data.images, '[]');
+    assert.equal(data.json, '{}');
+  });
+  it('23.alias', () => {
+    const validation = new validater({
+      rules: {
+        name: 'required|string|alias:wx_%'
+      }
+    });
+    const data = validation.validate({ name: 'max' });
+    assert.equal(data.wx_name, 'max');
+  });
+  it('24.ignore', () => {
+    const validation = new validater({
+      rules: {
+        age: 'int|ignore'
+      }
+    });
+    const data = validation.validate({ age: 'abc' });
+    assert.deepEqual(data, {});
+  });
 });

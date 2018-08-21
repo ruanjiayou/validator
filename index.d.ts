@@ -16,6 +16,7 @@ declare namespace validator {
   function isChar(v: string): boolean;
   function isFile(v: string): boolean;
   function getFileSignature(any: any): any;
+  function format(v: any, pattern: string): any;
 }
 
 declare module "validator" {
@@ -38,5 +39,6 @@ declare module "validator" {
     isChar(v: string): boolean;
     isFile(v: string): boolean;
     getFileSignature(any: any): any;
+    format(v: any, pattern: string): any;
   }
 }

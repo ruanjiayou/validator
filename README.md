@@ -53,14 +53,14 @@ try {
 required,nullable,empty,nonzero的区别:required,值不能为undefined;nullable,值可以为null,empty,值可以为空字符串;(empty:专门为前端准备,有些人就是要传id=&search=&time=);nonzero,不能是0或'0' '000'
 file类型: 可以为文件对象,可以为字符串
 一.内置字段类型(小写)
-  元类型: boolean/enum/int/float/array/string/text/url/email/date/dateonly/timeonly/file/methods/IDCard/creditCard
-  限制类型两大类:required/nullable/empty/nonzero/min/max/length/minlength/maxlength/if
-  说明:联合使用要求,min/max和int/float,minlength/maxlength/length和string/text
+  元类型: boolean/enum/int/float/object/array/string/url/email/date/dateonly/timeonly/file/methods/IDCard/creditCard
+  限制类型两大类:required/nullable/empty/nonzero/ignore/default/alias/min/max/length/minlength/maxlength/if
+  说明:联合使用要求,min/max和int/float,minlength/maxlength/length和string
   int/float默认{m:10,n:2}
 二.内置判断方法
   isUrl()/isDate()/isInt()/isFloat()/isEmail()/isID()/isCredit()/isString()/isChar()/isFile()
 三.其他成员函数说明
-  1) error() 对象编译为错误信息字符串
+  1) error() 统一错误处理,抛出异常
   2) filter() 滤除参数中额外的字段
   3) check() 对参数中指定的字段进行验证
   4) validate() 集成了filter()和check()的功能

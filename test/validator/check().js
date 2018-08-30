@@ -376,6 +376,7 @@ describe('测试字段检查', function () {
     const validation = new validater({
       rules: {
         createdAt: 'required|date|default:datetime',
+        origin: 'required|string|default:""',
         content: 'required|string|default:"123"',
         ts: 'required|int|default:timestamp',
         ms: 'required|int|default:unix',
@@ -385,8 +386,10 @@ describe('测试字段检查', function () {
         json: 'required|object|default:object'
       }
     });
-    const data = validation.validate({});
-    console.log(data);
+    const input = { origin: 'http' };
+    const data = validation.validate(input);
+    assert.equal(data.origin, 'http');
+    assert.equal(data.content, '123');
   });
   it('22.format', () => {
     const validation = new validater({

@@ -137,6 +137,7 @@ class validater {
       'dateonly': false,
       'timeonly': false,
       'default': undefined,
+      'format': undefined,
       'methods': {}
     };
     for (let i = 0; i < arr.length; i++) {
@@ -228,7 +229,7 @@ class validater {
   check(data) {
     for (let k in this.rules) {
       let rule = this.rules[k];
-      if (!_.isNil(rule.default)) {
+      if (undefined == data[k] && undefined !== rule.default) {
         data[k] = rule.default;
       }
       let v = data[k];
@@ -424,7 +425,9 @@ class validater {
           this.error(err);
         }
       }
-      v = this.format(v, rule.format);
+      if (rule.format) {
+        v = this.format(v, rule.format);
+      }
       if (typeof rule.alias == 'string') {
         const alias = rule.alias.replace('%', k);
         data[alias] = v;

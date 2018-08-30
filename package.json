@@ -1,6 +1,6 @@
 {
   "name": "validater-max",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "验证restful API接口的参数(Verify the restful API interface parameters) ",
   "main": "index.js",
   "scripts": {

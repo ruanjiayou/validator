@@ -2,18 +2,27 @@ const assert = require('assert');
 const validator = require('../index');
 
 describe('测试字段检查', function () {
-  it('0.atom', () => {
+  it('member function', () => {
     const validation = new validator({
-      rules: {
-        other: 'nullable|int'
-      }
+      rules: {}
     });
-    try {
-      validation.validate({});
-    } catch (err) {
-      assert.equal(err.field, 'other');
-      assert.equal(err.rule, 'atom');
-    }
+    let res = false;
+    res = validation.isUrl('http://www.google.com/path/file.txt?search=test&q=1#aaa');
+    assert.equal(res, true);
+    res = validation.isFloat('-1.0');
+    assert.equal(res, true);
+    res = validation.isEmail('test@gmail.com');
+    assert.equal(res, true);
+    res = validation.isString('a');
+    assert.equal(res, true);
+    res = validation.isChar('abc123');
+    assert.equal(res, true);
+    res = validation.isChar('\u9564');
+    assert.equal(res, false);
+    res = validation.isFile({});
+    assert.equal(res, false);
+    res = validation.isFile('');
+    assert.equal(res, false);
   });
   it('1.required', () => {
     const validation = new validator({
@@ -88,6 +97,31 @@ describe('测试字段检查', function () {
       assert.equal(err.rule, 'required');
     }
   });
+  it('boolean', () => {
+    const validation = new validator({
+      rules: {
+        approved: 'boolean'
+      }
+    });
+    const i1 = validation.validate({ approved: '1' });
+    const i2 = validation.validate({ approved: 1 });
+    const i3 = validation.validate({ approved: 'true' });
+    const i4 = validation.validate({ approved: 'TRUE' });
+    const i5 = validation.validate({ approved: true });
+    const i6 = validation.validate({ approved: null });
+    const i7 = validation.validate({ approved: undefined });
+    const i8 = validation.validate({ approved: false });
+    const i9 = validation.validate({ approved: 0 });
+    assert.deepEqual(i1, { approved: true });
+    assert.deepEqual(i2, { approved: true });
+    assert.deepEqual(i3, { approved: true });
+    assert.deepEqual(i4, { approved: true });
+    assert.deepEqual(i5, { approved: true });
+    assert.deepEqual(i6, { approved: false });
+    assert.deepEqual(i7, { approved: false });
+    assert.deepEqual(i8, { approved: false });
+    assert.deepEqual(i9, { approved: false });
+  });
   it('4.int', () => {
     const validation = new validator({
       rules: {
@@ -128,7 +162,8 @@ describe('测试字段检查', function () {
   it('5.float', () => {
     const validation = new validator({
       rules: {
-        price: 'float:9,2|min:-100|max:+100'
+        price: 'float:9,2|min:-100|max:+100.00',
+        weight: 'float',
       }
     });
     const i1 = validation.validate({ price: +100 });
@@ -155,6 +190,12 @@ describe('测试字段检查', function () {
     } catch (err) {
       assert.deepEqual(err.field, 'price');
       assert.deepEqual(err.rule, 'float.m');
+    }
+    try {
+      const i8 = validation.validate({ weight: 18 });
+      console.log(i8)
+    } catch (err) {
+      console.log(err);
     }
   });
   it('6.min', () => {
@@ -325,49 +366,22 @@ describe('测试字段检查', function () {
   it('19.file', () => {
     const validation = new validator({
       rules: {
-        image: 'file',
-        images: 'file|array'
+        upload: 'file|required'
       }
     });
-    const i1 = validation.validate({});
-    assert.deepEqual(i1, {});
-    const i2 = validation.validate({ images: [] });
-    assert.deepEqual(i2, { images: [] });
-    try {
-      const i3 = validation.validate({ images: 'xx' });
-    } catch (err) {
-      assert.equal(err.field, 'images');
-      assert.equal(err.rule, 'array');
-    }
-    const i4 = validation.validate({ images: ['xxx'] });
-    assert.deepEqual(i4, { images: ['xxx'] });
-    const i5 = validation.validate({ image: 'xx' });
-    assert.deepEqual(i5, { image: 'xx' });
-
-  });
-  it('20.methods', () => {
-    const validation = new validator({
-      rules: {
-        account: 'methods:ca'
-      },
-      methods: {
-        ca: function (v) {
-          let res = false;
-          if (this.isEmail(v)) {
-            res = true;
-          }
-          return res;
-        }
-      }
+    const data = validation.validate({
+      upload: [{
+        fieldname: 'upload',
+        originalname: 'index.html',
+        encoding: '7bit',
+        mimetype: 'application/octet-stream',
+        destination: process.cwd(),
+        filename: 'index.js',
+        path: process.cwd() + '/index.js',
+        size: 1856
+      }]
     });
-    const i1 = validation.validate({ account: '1439120442@qq.com' });
-    assert.deepEqual(i1, { account: '1439120442@qq.com' });
-    try {
-      const i2 = validation.validate({ account: '18972376482' });
-    } catch (err) {
-      assert.equal(err.field, 'account');
-      assert.equal(err.rule, 'methods');
-    }
+    console.log(data);
   });
   /**
    * if?
@@ -376,6 +390,11 @@ describe('测试字段检查', function () {
     const validation = new validator({
       rules: {
         createdAt: 'required|date|default:datetime',
+        d0: 'required|default:0',
+        d1: 'required|default:1',
+        dtrue: 'required|default:true',
+        dfalse: 'required|default:false',
+        dnull: 'required|default:null',
         origin: 'required|string|default:""',
         content: 'required|string|default:"123"',
         ts: 'required|int|default:timestamp',
@@ -390,17 +409,25 @@ describe('测试字段检查', function () {
     const data = validation.validate(input);
     assert.equal(data.origin, 'http');
     assert.equal(data.content, '123');
+    assert.strictEqual(data.d0, 0);
+    assert.strictEqual(data.d1, 1);
+    assert.strictEqual(data.dtrue, true);
+    assert.strictEqual(data.dfalse, false);
+    assert.strictEqual(data.dnull, null);
   });
   it('22.format', () => {
     const validation = new validator({
       rules: {
         images: 'required|array|default:array|format:string',
-        json: 'required|object|default:object|format:string'
+        json: 'required|object|default:object|format:string',
       }
     });
-    const data = validation.validate({});
-    assert.equal(data.images, '[]');
-    assert.equal(data.json, '{}');
+    const data = validation.validate({
+      images: ['abc'],
+      json: { test: 'abc' },
+    });
+    assert.equal(data.images, '["abc"]');
+    assert.equal(data.json, '{"test":"abc"}');
   });
   it('23.alias', () => {
     const validation = new validator({

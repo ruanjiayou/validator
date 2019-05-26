@@ -1,11 +1,13 @@
 const _ = require('lodash');
+const fs = require('fs');
 const moment = require('moment');
 
-const types = new Set(['required', 'nullable', 'empty', 'nonzero', 'ignore', 'default', 'alias', 'format', 'object', 'array', 'minlength', 'maxlength', 'length', 'min', 'max', 'methods', 'array', 'char', 'string', 'enum', 'int', 'float', 'file', 'boolean', 'date', 'dateonly', 'timeonly', 'email', 'url', 'IDCard', 'creditCard']);
-const atoms = new Set(['methods', 'array', 'object', 'char', 'string', 'enum', 'int', 'float', 'file', 'boolean', 'date', 'dateonly', 'timeonly', 'email', 'url', 'IDCard', 'creditCard']);
+const types = new Set(['required', 'nullable', 'empty', 'nonzero', 'ignore', 'default', 'alias', 'format', 'object', 'array', 'minlength', 'maxlength', 'length', 'min', 'max', 'method', 'array', 'char', 'string', 'enum', 'int', 'float', 'file', 'boolean', 'date', 'dateonly', 'timeonly', 'email', 'url', 'IDCard', 'creditCard']);
+// const atoms = new Set(['method', 'array', 'object', 'char', 'string', 'enum', 'int', 'float', 'file', 'boolean', 'date', 'dateonly', 'timeonly', 'email', 'url', 'IDCard', 'creditCard']);
 const bools = new Set([1, '1', true, 'true', 'TRUE']);
 const messages = {
   'zh-cn': {
+    'rule': '参数验证中没有 {{rule}} 规则!',
     'atom': '验证规则{{value}}中有且只有一种基本类型!',
     'required': '{{field}} 字段不能为{{value}}!',
     'url': '{{field}} 字段的值 {{data}} 不是有效的url!',
@@ -14,7 +16,7 @@ const messages = {
     'dateonly': '{{field}} 字段的值 {{data}} 不是有效的日期格式!',
     'timeonly': '{{field}} 字段的值 {{data}} 不是有效的时间格式!',
     'custom': '{{data}} 不是 {{field}} 字段中 自定义的验证方法 {{value}}!',
-    'methods': {},
+    'method': '{{field}} 验证没通过!',
     'int': '{{field}} 字段的值 {{data}} 必须是整数!',
     'float': '{{field}} 字段的值 {{data}} 不是有效的浮点数!',
     'float.m': '{{field}} 字段的值 {{data}} 数值过大!',
@@ -54,18 +56,16 @@ function _str2arr(str, sperator = ',', cb) {
  */
 class validater {
   /**
-   * @param {object} o 参数: rules/[lang]/[methods]/[messages]
+   * @param {object} o 参数: rules/[lang]/[messages]
    * @param {string} lang 语言,默认zh-cn
    */
   constructor(o = {}) {
-    this.lang = o.lang || 'zh-cn';
+    this.holder = '';
     this.rules = o.rules;
+    this.lang = o.lang || 'zh-cn';
     this.messages = o.messages || messages[this.lang];
     this.methods = o.methods || {};
     this.rules = this.parse(this.rules);
-    if (!_.isUndefined(o.hodler)) {
-      this.holder = o.hodler;
-    }
   }
   /**
    * 统一处理错误
@@ -81,9 +81,7 @@ class validater {
     err.validate = true;
     throw err;
   }
-  set holder(v) {
-    this.prototype.holder = v;
-  }
+
   /**
    * 将数据编译到模板中
    * @param {string} str 模板
@@ -120,9 +118,8 @@ class validater {
    * @param {string} str 字符串
    * @returns object 规则对象
    */
-  _str2rule(str) {
+  _str2rule(str, field) {
     const arr = _str2arr(str, '|');
-    let hasAtom = false;
     // 默认值处理
     let rule = {
       'required': false,
@@ -138,24 +135,17 @@ class validater {
       'timeonly': false,
       'default': undefined,
       'format': undefined,
-      'methods': {}
     };
     for (let i = 0; i < arr.length; i++) {
       let str = arr[i];
       let [kv, k, v] = /^([a-zA-Z0-9]+)[:]?(.*)$/.exec(str.trim());
       if (!types.has(k)) {
-        throw new Error(`参数验证中没有 ${k} 规则!`);
-      }
-      // 至少一个基本类型的检查
-      if (hasAtom === false && atoms.has(k)) {
-        hasAtom = true;
+        this.error({ field, data: '', rule: k, value: '' });
       }
       if ('file' === k) {
         rule.file = _str2arr(v);
-      } else if ('methods' === k) {
-        let that = this;
-        rule.methods = {};
-        _str2arr(v, ',', (name) => { rule.methods[name] = that.methods[name]; });
+      } else if ('method' === k) {
+        rule.method = v;
       } else if ('min' === k) {
         rule.min = parseFloat(v);
       } else if ('max' === k) {
@@ -203,9 +193,6 @@ class validater {
         rule[k] = true;
       }
     }
-    if (hasAtom === false) {
-      throw new Error(`验证语法中必须要有基本类型!`);
-    }
     return rule;
   }
   /**
@@ -217,7 +204,7 @@ class validater {
   parse(rules) {
     const res = {};
     for (let k in rules) {
-      res[k] = this._str2rule(rules[k]);
+      res[k] = this._str2rule(rules[k], k);
     }
     return res;
   }
@@ -239,14 +226,6 @@ class validater {
       if (null === v && rule.nullable || v === '' && rule.empty) {
         data[k] = v;
         continue;
-      }
-      // 0 '0' '0000'
-      if (rule.nonzero && /^[0]+$/.test(v)) {
-        if (rule.ignore && rule.required == false) {
-          continue;
-        }
-        err.rule = 'nonzero';
-        this.error(err);
       }
       if (_.isUndefined(v)) {
         if (rule.required) {
@@ -312,6 +291,14 @@ class validater {
           continue;
         }
         err.rule = 'max';
+        this.error(err);
+      }
+      // 0 '0' '0000'
+      if (rule.nonzero && v == 0) {
+        if (rule.ignore && rule.required == false) {
+          continue;
+        }
+        err.rule = 'nonzero';
         this.error(err);
       }
       if (rule.array && !_.isArray(v)) {
@@ -414,14 +401,22 @@ class validater {
         err.rule = 'creditCard';
         this.error(err);
       }
-      for (let f in rule.methods) {
-        let fn = rule.methods[f];
-        if (!fn.call(this, v)) {
+      if (rule.file) {
+        for (let i = 0; i < v.length; i++) {
+          if (!this.isFile(v[i]) && rule.ignore && rule.required == false) {
+            err.rule = 'file';
+            this.error(err);
+          }
+        }
+      }
+      if (rule.method && typeof this[rule.method]) {
+        let res = this[rule.method](v);
+        if (!res) {
           if (rule.ignore && rule.required == false) {
             continue;
           }
-          err.rule = 'methods';
-          err.value = f;
+          err.rule = 'method';
+          err.value = rule.method;
           this.error(err);
         }
       }
@@ -572,8 +567,12 @@ class validater {
    * 字符串或数组
    * @param {string|array} data 
    */
-  isFile(data) {
-    return ((_.isString(data)) || _.isArray(data)) ? true : false;
+  isFile(file) {
+    if (typeof file == 'object') {
+      let filepath = file.path;
+      return fs.existsSync(filepath) && !fs.lstatSync(filepath).isDirectory();
+    }
+    return false;
   }
 }
 

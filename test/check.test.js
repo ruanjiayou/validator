@@ -1,9 +1,9 @@
 const assert = require('assert');
-const validater = require('../../index').validater;
+const validator = require('../index');
 
 describe('测试字段检查', function () {
   it('0.atom', () => {
-    const validation = new validater({
+    const validation = new validator({
       rules: {
         other: 'nullable|int'
       }
@@ -16,7 +16,7 @@ describe('测试字段检查', function () {
     }
   });
   it('1.required', () => {
-    const validation = new validater({
+    const validation = new validator({
       rules: {
         name: 'required|string'
       }
@@ -57,7 +57,7 @@ describe('测试字段检查', function () {
     assert.deepEqual(i6, { name: [] });
   });
   it('2.nullable', () => {
-    const validation = new validater({
+    const validation = new validator({
       rules: {
         memberId: 'int|nullable',
         name: 'string|nullable'
@@ -71,7 +71,7 @@ describe('测试字段检查', function () {
     assert.deepEqual(i2, { memberId: 1 });
   });
   it('3.empty', () => {
-    const validation = new validater({
+    const validation = new validator({
       rules: {
         description: 'required|string|empty',
         name: 'required|string'
@@ -89,7 +89,7 @@ describe('测试字段检查', function () {
     }
   });
   it('4.int', () => {
-    const validation = new validater({
+    const validation = new validator({
       rules: {
         id: 'int'
       }
@@ -126,7 +126,7 @@ describe('测试字段检查', function () {
     }
   });
   it('5.float', () => {
-    const validation = new validater({
+    const validation = new validator({
       rules: {
         price: 'float:9,2|min:-100|max:+100'
       }
@@ -158,7 +158,7 @@ describe('测试字段检查', function () {
     }
   });
   it('6.min', () => {
-    const validation = new validater({
+    const validation = new validator({
       rules: {
         age: 'int|min:12'
       }
@@ -173,7 +173,7 @@ describe('测试字段检查', function () {
     }
   });
   it('7.max', () => {
-    const validation = new validater({
+    const validation = new validator({
       rules: {
         age: 'int|max:100'
       }
@@ -188,7 +188,7 @@ describe('测试字段检查', function () {
     }
   });
   it('8.array', () => {
-    const validation = new validater({
+    const validation = new validator({
       rules: {
         images: 'array',
         urls: 'array|minlength:1'
@@ -213,7 +213,7 @@ describe('测试字段检查', function () {
    * minlength maxlength
    */
   it('9.minlength', () => {
-    const validation = new validater({
+    const validation = new validator({
       rules: {
         password: 'char|minlength:6'
       }
@@ -228,7 +228,7 @@ describe('测试字段检查', function () {
     }
   });
   it('10.maxlength', () => {
-    const validation = new validater({
+    const validation = new validator({
       rules: {
         password: 'char|maxlength:12'
       }
@@ -249,7 +249,7 @@ describe('测试字段检查', function () {
 
   });
   it('13.enmu', () => {
-    const validation = new validater({
+    const validation = new validator({
       rules: {
         status: 'enum:pending,success,fail'
       }
@@ -265,16 +265,16 @@ describe('测试字段检查', function () {
     }
   });
   it('14.date', () => {
-    const validation = new validater({
+    const validation = new validator({
       rules: {
         createdAt: 'date'
       }
     });
-    const i1 = validation.validate({ createdAt: '2018-06-14 17:55:38' });
+    const i1 = validation.validate({ createdAt: '2018-06-14T09:55:38.000Z' });
     assert.deepEqual(i1, { createdAt: '2018-06-14T09:55:38.000Z' });
   });
   it('15.dateonly', () => {
-    const validation = new validater({
+    const validation = new validator({
       rules: {
         createdAt: 'dateonly'
       }
@@ -283,7 +283,7 @@ describe('测试字段检查', function () {
     assert.deepEqual(i1, { createdAt: '2018-06-14' });
   });
   it('16.timeonly', () => {
-    const validation = new validater({
+    const validation = new validator({
       rules: {
         createdAt: 'timeonly'
       }
@@ -292,7 +292,7 @@ describe('测试字段检查', function () {
     assert.deepEqual(i1, { createdAt: '17:57:52' });
   });
   it('17.IDCard', () => {
-    const validation = new validater({
+    const validation = new validator({
       rules: {
         id: 'IDCard'
       }
@@ -308,7 +308,7 @@ describe('测试字段检查', function () {
 
   });
   it('18.creditCard', () => {
-    const validation = new validater({
+    const validation = new validator({
       rules: {
         creditCard: 'creditCard'
       }
@@ -323,7 +323,7 @@ describe('测试字段检查', function () {
     }
   });
   it('19.file', () => {
-    const validation = new validater({
+    const validation = new validator({
       rules: {
         image: 'file',
         images: 'file|array'
@@ -346,7 +346,7 @@ describe('测试字段检查', function () {
 
   });
   it('20.methods', () => {
-    const validation = new validater({
+    const validation = new validator({
       rules: {
         account: 'methods:ca'
       },
@@ -373,7 +373,7 @@ describe('测试字段检查', function () {
    * if?
    */
   it('21.default', () => {
-    const validation = new validater({
+    const validation = new validator({
       rules: {
         createdAt: 'required|date|default:datetime',
         origin: 'required|string|default:""',
@@ -392,7 +392,7 @@ describe('测试字段检查', function () {
     assert.equal(data.content, '123');
   });
   it('22.format', () => {
-    const validation = new validater({
+    const validation = new validator({
       rules: {
         images: 'required|array|default:array|format:string',
         json: 'required|object|default:object|format:string'
@@ -403,7 +403,7 @@ describe('测试字段检查', function () {
     assert.equal(data.json, '{}');
   });
   it('23.alias', () => {
-    const validation = new validater({
+    const validation = new validator({
       rules: {
         name: 'required|string|alias:wx_%'
       }
@@ -412,7 +412,7 @@ describe('测试字段检查', function () {
     assert.equal(data.wx_name, 'max');
   });
   it('24.ignore', () => {
-    const validation = new validater({
+    const validation = new validator({
       rules: {
         age: 'int|ignore'
       }

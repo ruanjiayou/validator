@@ -577,6 +577,4 @@ class validater {
   }
 }
 
-module.exports = {
-  validater
-};
+module.exports = validater;

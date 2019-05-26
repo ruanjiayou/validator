@@ -4,7 +4,8 @@
   "description": "验证restful API接口的参数(Verify the restful API interface parameters) ",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "mocha test/**/*.test.js",
+    "cov": "istanbul cover ./node_modules/mocha/bin/_mocha -- -R spec"
   },
   "repository": {
     "type": "git",
@@ -25,5 +26,10 @@
   "dependencies": {
     "lodash": "^4.17.5",
     "moment": "^2.22.0"
+  },
+  "devDependencies": {
+    "coveralls": "^3.0.3",
+    "istanbul": "^0.4.5",
+    "mocha": "^6.1.4"
   }
 }

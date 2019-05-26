@@ -1,18 +1,18 @@
 # validator
+[![Build Status](https://travis-ci.org/ruanjiayou/validator.svg)](https://travis-ci.org/ruanjiayou/validator)
+[![Coverage Status](https://coveralls.io/repos/github/ruanjiayou/validator/badge.svg?branch=master)](https://coveralls.io/github/ruanjiayou/validator?branch=master)
+[![](https://img.shields.io/npm/dm/validater-max.svg)](https://www.npmjs.com/package/validater-max)
 验证restful API接口的参数(Verify the restful API interface parameters)
-```
-file-signature的参考地址:https://github.com/leahciMic/file-signature
-今后的更改与 https://github.com/ruanjiayou/header-helper 保持一致
-```
+
 ## 安装方式
 ```
 npm install https://github.com/ruanjiayou/validator.git --save
 ```
 ## 使用案例
 ```js
-// 特别注意:methods中不能用箭头函数,this是指向validater实例的,validater有一些基本的内置方法(isInt,isFloat等)
+// 特别注意:methods中不能用箭头函数,this是指向validator实例的,validator有一些基本的内置方法(isInt,isFloat等)
 // express项目,路由中验证参数
-const validater = require('validater');
+const validator = require('validater-max');
 const validation = new validater({
   // lang: 'zh-cn', //设置语言
   rules: {

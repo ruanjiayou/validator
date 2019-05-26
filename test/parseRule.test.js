@@ -1,6 +1,6 @@
 const assert = require('assert');
-const validater = require('../../index').validater;
-const validation = new validater();
+const validator = require('../index');
+const validation = new validator();
 
 describe('测试_str2rule()', function () {
   it('测试_str2rule()', function () {
